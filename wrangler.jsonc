@@ -1,6 +1,7 @@
 {
   "name": "zesto-sports-flooring-web",
   "compatibility_date": "2026-08-17",
+  "preview_urls": true,
   "assets": {
     "directory": "./public",
     "html_handling": "auto-trailing-slash",
