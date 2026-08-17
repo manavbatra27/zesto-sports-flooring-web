@@ -9,3 +9,6 @@ Official website codebase for Zesto Sports Flooring.
 
 ## Current baseline
 This repository starts from the browser-working prototype created during the Zesto website planning session. The existing visual direction, product pages, projects, quotation flow and flooring calculator are being preserved and evolved rather than discarded.
+
+## Deployment status
+Cloudflare preview trigger enabled for the `develop` branch.
