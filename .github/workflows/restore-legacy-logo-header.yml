@@ -34,16 +34,11 @@ jobs:
           )
 
           match = re.search(
-              br'<a class="brand" href="#home" aria-label="Zesto home"><img src="data:image/png;base64,([^\"]+)" alt="Zesto logo">',
+              br'<a class="brand"[^>]*><img src="data:image/png;base64,([^\"]+)"[^>]*></a>',
               legacy_html,
           )
           if not match:
-              match = re.search(
-                  br'data:image/png;base64,([^\"]+)" alt="Zesto logo"',
-                  legacy_html,
-              )
-          if not match:
-              raise SystemExit("Could not locate the legacy Zesto PNG in the old index.html")
+              raise SystemExit("Could not locate the legacy Zesto header PNG in the old index.html")
 
           logo = base64.b64decode(match.group(1))
           if not logo.startswith(b"\x89PNG\r\n\x1a\n"):
