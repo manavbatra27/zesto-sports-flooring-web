@@ -1,0 +1,115 @@
+name: Restore exact legacy Zesto header
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - .github/workflows/restore-legacy-logo-header.yml
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: develop
+
+      - name: Extract exact legacy PNG and restore header treatment
+        shell: python
+        run: |
+          from pathlib import Path
+          import base64
+          import re
+          import subprocess
+
+          legacy_commit = "19bd8b1de0ceb3f38c66fdb0e475999821020001"
+          legacy_html = subprocess.check_output(
+              ["git", "show", f"{legacy_commit}:index.html"]
+          )
+
+          match = re.search(
+              br'<a class="brand" href="#home" aria-label="Zesto home"><img src="data:image/png;base64,([^\"]+)" alt="Zesto logo">',
+              legacy_html,
+          )
+          if not match:
+              match = re.search(
+                  br'data:image/png;base64,([^\"]+)" alt="Zesto logo"',
+                  legacy_html,
+              )
+          if not match:
+              raise SystemExit("Could not locate the legacy Zesto PNG in the old index.html")
+
+          logo = base64.b64decode(match.group(1))
+          if not logo.startswith(b"\x89PNG\r\n\x1a\n"):
+              raise SystemExit("Extracted legacy asset is not a PNG")
+
+          logo_path = Path("public/assets/images/zesto-logo.png")
+          logo_path.parent.mkdir(parents=True, exist_ok=True)
+          logo_path.write_bytes(logo)
+
+          old_header_mark = '<span class="brand-mark" role="img" aria-label="Zesto Sports Flooring"></span>'
+          new_header_mark = '<img src="assets/images/zesto-logo.png" alt="Zesto logo">'
+          old_footer_mark = '<span class="footer-brand-mark" role="img" aria-label="Zesto Sports Flooring"></span>'
+          new_footer_mark = '<img class="footer-logo" src="assets/images/zesto-logo.png" alt="Zesto logo">'
+
+          changed_pages = 0
+          for page in Path("public").glob("*.html"):
+              text = page.read_text(encoding="utf-8")
+              updated = text.replace(old_header_mark, new_header_mark)
+              updated = updated.replace(old_footer_mark, new_footer_mark)
+              if updated != text:
+                  page.write_text(updated, encoding="utf-8")
+                  changed_pages += 1
+
+          css_path = Path("public/assets/css/styles.css")
+          css = css_path.read_text(encoding="utf-8")
+          css = css.replace(
+              'background:rgba(7,29,48,.92);backdrop-filter:blur(18px)',
+              'background:rgba(7,29,48,.9);backdrop-filter:blur(18px)',
+          )
+          css = css.replace(
+              '.brand-mark{display:block;width:220px;height:60px;background:url("../images/zesto-logo.svg") center/contain no-repeat}.footer-brand-mark{display:block;width:250px;height:78px;background:url("../images/zesto-logo.svg") center/contain no-repeat}',
+              '.brand img{width:220px;height:60px;object-fit:contain}.footer-logo{width:250px}',
+          )
+          css = css.replace(
+              '.brand-mark{width:170px;height:52px}',
+              '.brand img{width:170px;height:52px}',
+          )
+          css_path.write_text(css, encoding="utf-8")
+
+          if changed_pages == 0:
+              raise SystemExit("No current pages contained the refactored header markup")
+          if '.brand-mark{' in css or '.footer-brand-mark{' in css:
+              raise SystemExit("Legacy header CSS replacement was incomplete")
+
+          print(f"Restored exact legacy PNG ({len(logo):,} bytes) across {changed_pages} pages")
+
+      - name: Verify restored header values
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s public/assets/images/zesto-logo.png
+          grep -F '.header{position:sticky;top:0;z-index:100;background:rgba(7,29,48,.9);backdrop-filter:blur(18px)' public/assets/css/styles.css
+          grep -F '.brand img{width:220px;height:60px;object-fit:contain}' public/assets/css/styles.css
+          grep -F '.brand img{width:170px;height:52px}' public/assets/css/styles.css
+          grep -F '<img src="assets/images/zesto-logo.png" alt="Zesto logo">' public/index.html
+
+      - name: Commit restored legacy header
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/assets/images/zesto-logo.png public/assets/css/styles.css public/*.html
+          if git diff --cached --quiet; then
+            echo "Nothing to commit"
+            exit 0
+          fi
+          git commit -m "fix: restore exact legacy Zesto logo header"
+          git push origin HEAD:develop
